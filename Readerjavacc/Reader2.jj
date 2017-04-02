@@ -1,0 +1,308 @@
+/**
+ * JavaCC template file created by SF JavaCC plugin 1.5.28+ wizard for JavaCC 1.5.0+
+ */
+
+/**
+CIRCUIT : ID."[".(COMPOSANT | COMPOSITE)*."]"
+ELEMENT : 
+COMPOSANT : "<".NUM."|".TYPE."(".NUM.",".NUM.")".[ID]."->".(SORTIE_ENTRE)*">" 
+COMPOSITE : "<".NUM."|".TYPE."(".NUM.",".NUM.")"."[".(SORTIE_ENTRE)*.(COMPOSANT)*."]".[ID]."->".(SORTIE_ENTRE)*.">"
+SORTIE_ENTRE :"#".NUM."(".(NUM"#".NUM.[","].")"*)|"#".NUM."(".("#".NUM.[","].")"*)
+*/
+
+options{STATIC=false;}
+
+PARSER_BEGIN(Reader2)
+	import java.util.TreeMap;
+	import java.util.Map;
+	public class Reader2 {
+		public _Circuit read() throws Exception {return CIRCUIT();}
+	}
+PARSER_END(Reader2)
+
+SKIP :{" " |"\r" | "\t" | "\n"}
+TOKEN :
+{
+	<NUM:( <DIGIT> )+ >
+	| <ID: <LETTER> (<DIGIT> | <LETTER>)+>
+	| <#LETTER: ["a"-"z","A"-"Z"] >
+	| <#DIGIT: ["0" - "9"] >
+}
+
+TOKEN :
+{
+  	<P_OUVERT : "<"|"("|"{" >
+ 	|<C_OUVERT : "[" >
+ 	|<C_FERME : "]">
+	|<P_FERME : ">"|")"|"]"|"}" >
+	|<FLECHE : "->" >
+	|<SEPARATEUR : ","|"|" >
+	|<HASHTAG : "#" >
+}
+
+int Nombre() throws Exception:
+{
+  Token t;
+}
+{	t = <NUM> 
+	{return  Integer.parseInt(t.image);}
+}
+
+String Nom() throws Exception:
+{
+  Token t;
+}
+{	t = <ID> 
+	{return  t.image;}
+}
+
+$Composant TYPE(String type) throws Exception:
+{
+  $Composant composant = null;
+}
+{
+ 	{
+ 	  	switch (type)
+ 	  	{
+ 	  	  	case "Itr" : composant = ($Composant)new Itr();break;
+			case "Gnd" : composant = ($Composant)new Gnd();break;
+ 	  		case "Vcc" : composant = ($Composant)new Vcc();break;
+ 	  		case "Led" : composant = ($Composant)new Led();break;
+ 	  		case "Et" : composant = ($Composant)new Et();break;
+ 	  		case "Ou" : composant = ($Composant)new Ou();break;
+ 	  		case "Non" : composant = ($Composant)new Non();break;
+ 	  		case "Oux" : composant = ($Composant)new Oux();break;
+ 	 	}
+ 	 	return composant;
+	}
+}
+
+/**CircuitFerme*/
+_Circuit CIRCUIT() throws Exception:
+{ /**CircuitFerme circuit*/
+	$Composant compo = null;
+	Circuit circuit = new Circuit();
+	int indice = -1;
+	int i;
+	TreeMap <Integer,TreeMap<Integer,Integer>> sortie = new TreeMap <Integer,TreeMap<Integer,Integer>>();
+	TreeMap <Integer,TreeMap<Integer,TreeMap<Integer,Integer>>> listeConnexion = new TreeMap <Integer,TreeMap<Integer,TreeMap<Integer,Integer>>>();
+	String type = "";
+}
+{
+
+		<ID>
+		<C_OUVERT>
+		(
+			(LOOKAHEAD(10)
+		  	 indice = COMPOSANT(compo,sortie)|indice = COMPOSITE(compo,type, sortie)
+		  	)
+		  	{ listeConnexion.put(indice, sortie);
+		  	System.out.println("Composant : "  + compo);
+		  	System.out.println("Taille sortie : "  + sortie.size()); 
+		  	circuit.ajouter(compo,indice);}
+		)*
+		<C_FERME>
+
+		/**Lien du composite*/
+		{
+			//Lier les coposant entre eux
+			//Pour chaque composant
+			for(i = 0; i <listeConnexion.size(); i++)
+			{
+				//Obtenir liste des connexion sortie
+				sortie = listeConnexion.get(i);
+				//Pour chaque port de sortie
+				for(Map.Entry<Integer,TreeMap<Integer,Integer>> entry : sortie.entrySet())
+			  	{
+					//entry.getKey() = numPort de sortie
+			  	  	for(Map.Entry<Integer,Integer> entry2 : entry.getValue().entrySet())
+			  		{ //entry2.getKey() = compoENtre, entry2.getValues() = portEntre
+					  circuit.connecter(i,entry.getKey(),entry2.getKey(),entry2.getValue()); 
+			  		}
+			  	}
+			}
+			return circuit;
+		}		
+}
+
+int COMPOSANT($Composant compo,TreeMap <Integer,TreeMap<Integer,Integer>> sortie ) throws Exception:
+{
+  	int nb_sorties;
+	int nb_entrees;
+	int port;
+	int indice;
+	String facultatif;
+	String type;
+	$Composant c;
+	
+	TreeMap <Integer,Integer> liste = new TreeMap<Integer,Integer>();
+}
+{
+	{System.out.println("Lire Composant");}  	
+	/**Indice*/
+	<P_OUVERT>  
+	indice = Nombre()
+	{System.out.println("Indice : "+indice);}  	
+	/**type*/
+	<SEPARATEUR>
+	type = Nom()
+    c = TYPE(type)
+    /**Lire nombre entrée et sortie*/
+	<P_OUVERT> 
+	nb_entrees = Nombre()
+	<SEPARATEUR> 
+	nb_sorties = Nombre()
+	<P_FERME> 
+
+	/**Lire élément facultatif*/
+	(<P_OUVERT> 
+	facultatif = Nom()
+	<P_FERME>)?
+	(<FLECHE>)? 
+	 
+	/**Les sorties*/
+	(
+	  {port = -1;}
+	   port= ENTRE_SORTIE(liste)
+	  {sortie.put(port,liste);}
+	)*
+	<P_FERME>
+	{
+	compo =c;
+	System.out.println("compo : "+compo+"c : "+c);
+	  return indice;}
+}
+
+
+
+
+/**"<".NUM."|".TYPE."(".NUM.",".NUM.")"."[".SORTIE_ENTRE.COMPOSANT."]".[ID]."->".SORTIE_ENTRE.">"*/
+int COMPOSITE($Composant compo,String type,TreeMap <Integer,TreeMap<Integer,Integer>> connexionSortie) throws Exception:
+{
+  	int nb_sorties;
+	int nb_entrees;
+	int indiceCompo = 0;
+	int numPort = 0;
+	int i;
+	int indice;
+	String facultatif;
+	Composite composite;
+	$Composant c = null;
+	
+	TreeMap <Integer,Integer> liste = new TreeMap <Integer,Integer>();
+	TreeMap <Integer,TreeMap<Integer,Integer>> connexionEntre = new TreeMap <Integer,TreeMap<Integer,Integer>>();
+	TreeMap <Integer,TreeMap<Integer,TreeMap<Integer,Integer>>> listeConnexion = new TreeMap <Integer,TreeMap<Integer,TreeMap<Integer,Integer>>>();
+	TreeMap <Integer,TreeMap<Integer,Integer>> s = new TreeMap <Integer,TreeMap<Integer,Integer>>();
+}
+{
+	{System.out.println("Lire Composite");}  
+	
+	/**Indice*/
+	<P_OUVERT>  
+	indice = Nombre()
+	
+	/**type*/
+	<SEPARATEUR> 
+    type = Nom()
+
+	/**Lire nombre entrées et un nombre de sorie*/
+	<P_OUVERT> 
+	nb_entrees = Nombre()
+	<SEPARATEUR> 
+	nb_sorties = Nombre()
+	<P_FERME>
+	
+	//Creer Composite
+	{composite = new Composite(nb_entrees,nb_sorties,type);}
+	
+	/**Liste des entrées*/
+	<C_OUVERT>
+
+	(numPort = ENTRE_SORTIE(liste)
+  	{connexionEntre.put(numPort,liste);}
+  	[<SEPARATEUR>])*
+    
+
+	/**Liste des composants*/
+	( (LOOKAHEAD(10) indiceCompo = COMPOSANT(c, s) | indiceCompo = COMPOSITE(c ,type,s))
+  	{ System.out.println("Ajouter Composant : "+ indiceCompo);listeConnexion.put(indiceCompo,s);composite.ajouter(c,indiceCompo);})*
+	  	
+	<C_FERME>
+	/**Lire un éléments facltatif*/
+	(<P_OUVERT> 
+	facultatif = Nom()
+	<P_FERME>)*
+	
+	(<FLECHE>)*
+	{s = new TreeMap <Integer,TreeMap<Integer,Integer>>();}
+	/**Liste des sorties*/
+  	(
+  	  numPort = ENTRE_SORTIE(liste)[<SEPARATEUR>]
+  	{s.put(numPort,liste);})*
+	<P_FERME>
+	
+	
+	
+	/**Lien du composite*/
+	{
+		//Connecter les port d'entrées
+		System.out.println("Nombre de composant"+composite.nbComposant());
+		for(i = 0; i <nb_entrees; i++)
+		{
+			for(Map.Entry<Integer,Integer> entry : connexionEntre.get(i).entrySet())
+	  		{ 
+				composite.connecterEntre(entry.getKey(),i,entry.getValue());
+	  		}
+		}
+		//Lier les coposant entre eux
+		//Pour chaque composant
+		for(i = 0; i <listeConnexion.size(); i++)
+		{
+			//Obtenir liste des connexion sortie
+			connexionSortie = listeConnexion.get(i);
+			
+			//Pour chaque port de sortie
+			for(Map.Entry<Integer,TreeMap<Integer,Integer>> entry : connexionSortie.entrySet())
+		  	{
+				//entry.getKey() = numPort de sortie
+		  	  	for(Map.Entry<Integer,Integer> entry2 : entry.getValue().entrySet())
+		  		{ //entry2.getKey() = compoENtre, entry2.getValues() = portEntre
+		  		
+		  		  if(entry2.getKey() == -1)//Connexion sortie
+		  		  { composite.connecterSortie(i,entry2.getValue(),entry.getKey()); }
+		  		  //Connexion normale
+				  else { composite.connecter(i,entry.getKey(),entry2.getKey(),entry2.getValue()); }
+		  		}
+		  	}
+		}
+		compo = composite;
+		return indice;
+	}
+}
+
+int ENTRE_SORTIE(TreeMap<Integer,Integer> liste) throws Exception:
+{
+  int numCompo2;
+  int port2;
+  int port;
+}
+{
+	<HASHTAG>
+	port = Nombre()
+
+	<P_OUVERT>
+	(
+		(<HASHTAG>
+		port2 = Nombre()
+		[<SEPARATEUR>]
+		{liste.put(-1,port2);})+
+		| 
+		(numCompo2 = Nombre()
+		<HASHTAG>
+		port2 = Nombre()
+		[<SEPARATEUR>]
+		{liste.put(numCompo2,port2);})+
+	)
+	<P_FERME>
+	{return port;}
+}
